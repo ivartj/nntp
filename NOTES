@@ -1,0 +1,190 @@
+IDEAS FOR COMMANDS TO IMPLEMENT
+===============================
+
+I wish to implement a set of convenient Unix-style commands for interacting
+with NNTP servers. Here are some ideas.
+
+The commands have the NNTP server and port to connect set by the following,
+where the later overrides the former.
+
+host:
+ * NNTPSERVER environmental variable
+ * -s command-line option
+
+port:
+ * NNTPSERVER environmental variable (":119")
+ * NNTPPORT environemtnal variable ("119")
+ * -p command-line option
+
+The following are the commands:
+
+ * nntp-post <newsgroup> [ <article-file> ]
+
+ * nntp-get [ -o <output-file> ] <message-id>
+   retrieves article by message-id, including headers
+
+ * nntp-latest [ -n <maximum-articles> ] <newsgroup>
+   retrieves latest article message-ids on newsgroup
+
+ * nntp-groups [ <wildmat> ]
+   query the server for newsgroup names matching the given patterns
+
+
+NOTES FROM READING OF STANDARD
+==============================
+
+Notes from reading RFC3977 - Network News Transfer Protocol (NNTP).
+ 
+Encoding is UTF-8 but does not permit byte-order-mark
+
+CLIENT-SERVER EXCHANGE
+ 1. client starts connection
+ 2. server sends greeting
+ 3. client sends command
+     * One line terminated by CRLF.
+       Including CRLF, line must not exceed 512.
+     * Keyword possibly followed by arguments.
+       Arguments are separated by space or tab characters.
+       Arguments can not exceed 497 bytes.
+       Keywords are case insensitive.
+     * Some commands may return a request from the server for more data
+ 4. server sends response
+     * Some responses are single-line, others multi-line.
+       Initial line must not exceed 512 bytes including response code
+       and CRLF.
+     * Initial line starts with a 3-digit response code (RESPONSE CODES)
+     * A multi-line block is the the lines in a response following the
+       initial line.
+       Can not include inline CR LF NUL bytes except for CRLF line endings.
+       If a line starts with the termination byte ("."), that line must
+       be escaped with an additional dot.
+     * The multi-line block is terminated by dot (".") followed by CRLF.
+ 5. logout
+     * A server can have an inactivity logout timer
+
+RESPONSE CODES
+  Initial line starts with 3-digit response code followed by arguments,
+  all separated by single spaces.
+
+       1xx - informative message.
+       2xx - command completed OK
+       3xx - command ok so far; send the rest of it
+       4xx - command was syntactically correct but failed for some reason
+       5xx - command invalid or unrecognized
+
+       x0x - connection, setup, and miscellaneous mesages
+       x1x - newsgroup selection
+       x2x - article selection
+       x3x - distribution function
+       x4x - posting
+       x8x - reserved for authentication and privacy extensions
+       x9x - reserved for non-standard extensions
+
+       500 - command not recognized
+       501 - command recognized but invalid
+       403 - server unable to carry out command
+       503 - server unable to carry out optionally implemented command
+
+       502 - response asks to reconnect with authorization to
+             complete command
+       480 - response asks to authenticate on current connection
+       483 - response asks to negotiate an encryption method
+       401 - response asks to change state of the connection in some manner
+             specified by argument
+
+       400 - server is closing connection
+
+COMMANDS
+
+ - initial connection, must not be pipelined
+   Responses:
+      200 - OK, posting allowed
+      201 - OK, posting prohibited
+      400 - Service temporarily unavailable
+      502 - Service permanently unavailable
+   400 and 502 is followed by a server close on the connection.
+
+ - QUIT
+   Responses:
+      205 - Connection closing
+
+ - CAPABILITIES
+   Returns a list of capabilities.
+   Each line describes a capability.
+   Lines consist of tokens separated by space or tab characters.
+   Tokens consist of 1 or more UTF-8 characters other than space or tab.
+   Tokens form the initial label and its arguments.
+
+   VERSION ver
+   Must be advertised as the first capability.
+   The following number indicates the version of the NNTP protocol that
+   is supported.
+
+   READER
+   This server implements the various commands for reading news.
+
+   IHAVE
+   This server supports the IHAVE command.
+
+   POST
+   This capability indicates that the server implements the POST command.
+
+   NEWNEWS
+   This capability indicates that the server implements the NEWNEWS command.
+
+   HDR
+   This capability indicates that the server implements the header access
+   commands (HDR and LIST HEADERS).
+
+   OVER
+   This capability indicates that the server implements the overview access
+   commands (OVER and LIST OVERVIEW.FMT). If and only if the server
+   supports the message-id form of the OVER command, there must be a single
+   argument MSGID.
+
+   LIST
+   This capaibility indicates that the server implements at least one
+   variant of the LIST command. There MUST be one argument for each variant
+   of the LIST command supported by the server, giving the keyword for the
+   variant.
+
+   IMPLEMENTATION
+   This capability MAY be provided by a server. If so, the arguments SHOULD
+   be used to provide information such as server software name and version
+   number. The client MUST NOT use this line to determine capabilities of
+   the server.
+
+   MODE-READER
+   This capability indicates that server is mode-switchin and that the MODE
+   READER command needs to be used to enable the READER capability.
+
+PIPELINING
+  A client can send successive commands without waiting for responses on some
+  circumstances. It may not do it before receiving a greeting on the
+  connection and not if the specification says a command must not be
+  pipelined.
+
+ARTICLES
+  Consists of headers and body.
+  Headers and body is separated by an empty line (two CRLF pairs) that can be
+  followed by CRLFs that will be considered part of the body.
+  A body can be empty.
+
+  article:
+      header-lines ... CRLF CRLF body
+
+  header-line:
+      header-name ": " header-content CRLF
+
+  header-name:
+      printable US-ASCII characters other than colons
+
+  header-content:
+      can be empty, MUST NOT contain CRLF, but can be folded with
+      a CRLF (space | tab) sequence that will not be considered part of the
+      content.
+
+  Every article must have a message-id that should be GLOBALLY unique.
+  A message-id consists of "<" and ">" with one or more
+  printable US-ASCII characters other than "<" and ">" between.
+  Must be between 3 and 250 bytes in length.
